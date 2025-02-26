@@ -24,7 +24,6 @@ import (
 	"cloud.google.com/go/profiler"
 	"cloud.google.com/go/storage"
 	"cloud.google.com/go/storage/experimental"
-	"github.com/googleapis/gax-go/v2"
 	"go.opencensus.io/stats"
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
@@ -56,12 +55,11 @@ var (
 	// ProjectName denotes gcp project name.
 	ProjectName = flag.String("project", "gcs-fuse-test", "GCP project name.")
 
-	clientProtocol   = flag.String("client-protocol", "http", "Network protocol.")
+	clientProtocol = flag.String("client-protocol", "http", "Network protocol.")
 
 	// Object name = objectNamePrefix + {thread_id} + objectNameSuffix
 	objectNamePrefix = flag.String("obj-prefix", "princer_100M_files/file_", "Object prefix")
 	objectNameSuffix = flag.String("obj-suffix", "", "Object suffix")
-
 
 	tracerName      = "princer-storage-benchmark"
 	enableTracing   = flag.Bool("enable-tracing", false, "Enable tracing with Cloud Trace export")
@@ -129,7 +127,7 @@ func CreateHTTPClient(ctx context.Context, isHTTP2 bool) (client *storage.Client
 	if *enableReadStallRetry {
 		return storage.NewClient(ctx, option.WithHTTPClient(httpClient),
 			experimental.WithReadStallTimeout(&experimental.ReadStallTimeoutConfig{
-				Min: time.Second,
+				Min:              time.Second,
 				TargetPercentile: 0.99,
 			}))
 	}
@@ -186,13 +184,13 @@ func ReadObject(ctx context.Context, workerID int, bucketHandle *storage.BucketH
 
 func WriteObject(ctx context.Context, workerId int, bucketHandle *storage.BucketHandle) (err error) {
 
-	objectName := *namePrefix + strconv.Itoa(workerId) + ObjectNameSuffix
+	objectName := *objectNamePrefix + strconv.Itoa(workerId) + *objectNameSuffix
 
-	for i := 0; i < *NumOfReadCallPerWorker; i++ {
+	for i := 0; i < *numOfReadCallPerWorker; i++ {
 		var span trace.Span
 		traceCtx, span := otel.GetTracerProvider().Tracer(tracerName).Start(ctx, "WriteObject")
 		span.SetAttributes(
-			attribute.KeyValue{"bucket", attribute.StringValue(*BucketName)},
+			attribute.KeyValue{"bucket", attribute.StringValue(*bucketName)},
 		)
 		data := make([]byte, 100*1024*1024)
 		rand.Read(data)
@@ -200,7 +198,7 @@ func WriteObject(ctx context.Context, workerId int, bucketHandle *storage.Bucket
 		reader := bytes.NewReader(data)
 
 		start := time.Now()
-		object := bucketHandle.Object(objectName)
+		object := bucketHandle.Object(objectName + strconv.Itoa(i))
 		wc := object.NewWriter(traceCtx)
 
 		if _, err = io.Copy(wc, reader); err != nil {
