@@ -1,23 +1,27 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	// Register the pprof endpoints under the web server root at /debug/pprof
+	_ "net/http/pprof"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/googleapis/gax-go/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
 	"cloud.google.com/go/storage"
-	"github.com/googleapis/gax-go/v2"
 	"go.opencensus.io/stats"
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
@@ -26,9 +30,6 @@ import (
 	// Install google-c2p resolver, which is required for direct path.
 	_ "google.golang.org/grpc/balancer/rls"
 	_ "google.golang.org/grpc/xds/googledirectpath"
-
-	// Register the pprof endpoints under the web server root at /debug/pprof
-	_ "net/http/pprof"
 )
 
 var (
@@ -158,6 +159,46 @@ func ReadObject(ctx context.Context, workerId int, bucketHandle *storage.BucketH
 	return
 }
 
+func WriteObject(ctx context.Context, workerId int, bucketHandle *storage.BucketHandle) (err error) {
+
+	objectName := ObjectNamePrefix + strconv.Itoa(workerId) + ObjectNameSuffix
+
+	for i := 0; i < *NumOfReadCallPerWorker; i++ {
+		var span trace.Span
+		traceCtx, span := otel.GetTracerProvider().Tracer(tracerName).Start(ctx, "WriteObject")
+		span.SetAttributes(
+			attribute.KeyValue{"bucket", attribute.StringValue(*BucketName)},
+		)
+		data := make([]byte, 100*1024*1024)
+		rand.Read(data)
+		// byte slice to bytes.Reader, which implements the io.Reader interface
+		reader := bytes.NewReader(data)
+
+		start := time.Now()
+		object := bucketHandle.Object(objectName)
+		wc := object.NewWriter(traceCtx)
+
+		if _, err = io.Copy(wc, reader); err != nil {
+			err = fmt.Errorf("error in io.Copy: %w", err)
+			return
+		}
+
+		// We can't use defer to close the writer, because we need to close the
+		// writer successfully before calling Attrs() method of writer.
+		if err = wc.Close(); err != nil {
+			err = fmt.Errorf("error in closing writer : %w", err)
+			return
+		}
+
+		duration := time.Since(start)
+		stats.Record(ctx, writeLatency.M(float64(duration.Milliseconds())))
+
+		span.End()
+	}
+
+	return
+}
+
 func main() {
 	flag.Parse()
 	ctx := context.Background()
@@ -214,7 +255,7 @@ func main() {
 	for i := 0; i < *NumOfWorker; i++ {
 		idx := i
 		eG.Go(func() error {
-			err = ReadObject(ctx, idx, bucketHandle)
+			err = WriteObject(ctx, idx, bucketHandle)
 			if err != nil {
 				err = fmt.Errorf("while reading object %v: %w", ObjectNamePrefix+strconv.Itoa(idx), err)
 				return err
