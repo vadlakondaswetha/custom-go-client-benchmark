@@ -58,6 +58,8 @@ var (
 	ObjectNamePrefix = "princer_100M_files/file_"
 	ObjectNameSuffix = ""
 
+	namePrefix = flag.String("prefix", "princer_100M_files/file_", "Prefix")
+
 	tracerName      = "princer-storage-benchmark"
 	enableTracing   = flag.Bool("enable-tracing", false, "Enable tracing with Cloud Trace export")
 	enablePprof     = flag.Bool("enable-pprof", false, "Enable pprof server")
@@ -161,7 +163,7 @@ func ReadObject(ctx context.Context, workerId int, bucketHandle *storage.BucketH
 
 func WriteObject(ctx context.Context, workerId int, bucketHandle *storage.BucketHandle) (err error) {
 
-	objectName := ObjectNamePrefix + strconv.Itoa(workerId) + ObjectNameSuffix
+	objectName := *namePrefix + strconv.Itoa(workerId) + ObjectNameSuffix
 
 	for i := 0; i < *NumOfReadCallPerWorker; i++ {
 		var span trace.Span
