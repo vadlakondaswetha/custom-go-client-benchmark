@@ -2,47 +2,24 @@ package main
 
 import (
 	"encoding/csv"
-	"flag"
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
 )
 
-var (
-	gcsFolderPath   = flag.String("gcs-folder-path", "gs://gcs-fuse-warp-test-bucket/tail_latency/req", "GCS folder path")
-	localFolderPath = flag.String("local-folder-path", "tmp", "Local folder path")
-
-	forceDownload = flag.Bool("force-download", false, "Force download or not")
-)
-
-// DataRow represents one metrics.
 type DataRow struct {
-	Timestamp   int64
-	ReadLatency float64
-	Throughput  float64
+	Timestamp    int64
+	ReadLatency  float64
+	Throughput   float64
 }
 
 func main() {
-	flag.Parse()
-
 	// Define the folder containing the CSV files
-	folder, err := filepath.Abs(*localFolderPath)
-	if err != nil {
-		fmt.Println("Error while converting relative path to absolute")
-	}
-
-	_, err = os.Stat(folder)
-	if *forceDownload || (err != nil && !os.IsExist(err)) {
-		err := downloadFileWithGcloud(*gcsFolderPath, *localFolderPath)
-		if err != nil {
-			fmt.Println("Error while downloading the content: ")
-		}
-	}
-
+	folder := "/usr/local/google/home/princer/csv/metrics"
+	
 	// Store all data rows from all files
 	var allDataRows []DataRow
 
@@ -50,7 +27,7 @@ func main() {
 	cmnEndTime := int64(math.MaxInt64)
 
 	// Iterate over all CSV files in the folder
-	err = filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -65,8 +42,8 @@ func main() {
 			if cmnStartTime < dataRows[0].Timestamp {
 				cmnStartTime = dataRows[0].Timestamp
 			}
-			if cmnEndTime > dataRows[n-1].Timestamp {
-				cmnEndTime = dataRows[n-1].Timestamp
+			if cmnEndTime > dataRows[n - 1].Timestamp {
+				cmnEndTime = dataRows[n - 1].Timestamp
 			}
 
 			if err != nil {
@@ -238,23 +215,3 @@ func percentileFloat64(values []float64, p float32) float64 {
 	return values[index]
 }
 
-func downloadFileWithGcloud(gcsFolderPath string, localFolderName string) error {
-	// Create the folder using os.Mkdir
-	err := os.Mkdir(localFolderName, 0755) // 0755 sets standard permissions
-	if err != nil && !os.IsExist(err) {
-		return err
-	}
-
-	// Construct the gcloud command
-	cmd := exec.Command("gcloud", "storage", "cp", "-r", gcsFolderPath,
-		localFolderName)
-
-	// Execute the command and capture its output
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("gcloud command failed: %v\nOutput: %s", err, output)
-	}
-
-	fmt.Println("File downloaded successfully!")
-	return nil
-}

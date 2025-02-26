@@ -14,18 +14,17 @@ import (
 
 var (
 	// The restaurant rating in number of stars.
-	readLatency = stats.Float64("readLatency", "Complete read latency", stats.UnitMilliseconds)
-	firstByteReadLatency = stats.Float64("firstByteReadLatency", "First byte read latency", stats.UnitMilliseconds)
+	readLatencyStat = stats.Float64("readLatency", "Complete read latency", stats.UnitMilliseconds)
 )
 
 var sdExporter *stackdriver.Exporter
 
 func registerLatencyView() {
 	v := &view.View{
-		Name:        "princer_go_client_read_latency",
-		Measure:     readLatency,
-		Description: "Complete read latency for a given go-client",
-		TagKeys:     []tag.Key{tag.MustNewKey("princer_read_latency")},
+		Name:        "princer_warp_read_latency",
+		Measure:     readLatencyStat,
+		Description: "Complete read latency for a given file system operation",
+		TagKeys:     []tag.Key{tag.MustNewKey("warp_read_latency")},
 		Aggregation: ochttp.DefaultLatencyDistribution,
 	}
 
@@ -33,29 +32,16 @@ func registerLatencyView() {
 		log.Fatalf("Failed to register the readLatency view: %v", err)
 	}
 }
-func registerFirstByteLatencyView() {
-	v := &view.View{
-		Name:        "princer_go_client_first_byte_read_latency",
-		Measure:     firstByteReadLatency,
-		Description: "First byte read latency for a given go-client",
-		TagKeys:     []tag.Key{tag.MustNewKey("princer_first_byte_read_latency")},
-		Aggregation: ochttp.DefaultLatencyDistribution,
-	}
-
-	if err := view.Register(v); err != nil {
-		log.Fatalf("Failed to register the firstByteReadLatency view: %v", err)
-	}
-}
 
 func enableSDExporter() (err error) {
 	sdExporter, err := stackdriver.NewExporter(stackdriver.Options{
 		// ProjectID <change this value>
-		ProjectID: *ProjectName,
+		ProjectID: "gcs-tess",
 		// MetricPrefix helps uniquely identify your metrics. <change this value>
-		MetricPrefix: "custom.googleapis.com/custom-go-client/",
+		MetricPrefix: "custom.googleapis.com/warp-test/",
 		// ReportingInterval sets the frequency of reporting metrics
 		// to the Cloud Monitoring backend.
-		ReportingInterval: 30 * time.Second,
+		ReportingInterval: 60 * time.Second,
 	})
 
 	if err != nil {
