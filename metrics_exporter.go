@@ -14,7 +14,8 @@ import (
 
 var (
 	// The restaurant rating in number of stars.
-	readLatency  = stats.Float64("readLatency", "Complete read latency", stats.UnitMilliseconds)
+	readLatency = stats.Float64("readLatency", "Complete read latency", stats.UnitMilliseconds)
+	firstByteReadLatency = stats.Float64("firstByteReadLatency", "First byte read latency", stats.UnitMilliseconds)
 	writeLatency = stats.Float64("writeLatency", "Complete read latency", stats.UnitMilliseconds)
 )
 
@@ -43,6 +44,19 @@ func registerLatencyView() {
 
 	if err := view.Register(write); err != nil {
 		log.Fatalf("Failed to register the writeLatency view: %v", err)
+	}
+}
+func registerFirstByteLatencyView() {
+	v := &view.View{
+		Name:        "princer_go_client_first_byte_read_latency",
+		Measure:     firstByteReadLatency,
+		Description: "First byte read latency for a given go-client",
+		TagKeys:     []tag.Key{tag.MustNewKey("princer_first_byte_read_latency")},
+		Aggregation: ochttp.DefaultLatencyDistribution,
+	}
+
+	if err := view.Register(v); err != nil {
+		log.Fatalf("Failed to register the firstByteReadLatency view: %v", err)
 	}
 }
 
